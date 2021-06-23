@@ -62,6 +62,8 @@ void ClusterResourceScheduler::AddOrUpdateNode(
 
 void ClusterResourceScheduler::AddOrUpdateNode(int64_t node_id,
                                                const NodeResources &node_resources) {
+  RAY_LOG(INFO) << "dbg: ClusterResourceScheduler::AddOrUpdateNode() node_resources="
+                << node_resources.DebugString(string_to_int_map_);
   auto it = nodes_.find(node_id);
   if (it == nodes_.end()) {
     // This node is new, so add it to the map.
@@ -78,7 +80,7 @@ bool ClusterResourceScheduler::UpdateNode(const std::string &node_id_string,
   if (!nodes_.contains(node_id)) {
     return false;
   }
-
+  RAY_LOG(INFO) << "dbg: ClusterResourceScheduler::UpdateNode() resource_data=" << resource_data.ShortDebugString();
   auto resources_total = MapFromProtobuf(resource_data.resources_total());
   auto resources_available = MapFromProtobuf(resource_data.resources_available());
   NodeResources node_resources = ResourceMapToNodeResources(
@@ -104,6 +106,8 @@ bool ClusterResourceScheduler::UpdateNode(const std::string &node_id_string,
     for (auto &entry : node_resources.custom_resources) {
       local_view.custom_resources[entry.first].available = entry.second.available;
     }
+  } else {
+    RAY_LOG(INFO) << "dbg: ClusterResourceScheduler::UpdateNode() not updating available.";
   }
 
   AddOrUpdateNode(node_id, local_view);
@@ -164,17 +168,15 @@ bool ClusterResourceScheduler::IsFeasible(const TaskRequest &task_req,
   return true;
 }
 
-int64_t ClusterResourceScheduler::IsSchedulable(const TaskRequest &task_req,
+bool ClusterResourceScheduler::IsSchedulable(const TaskRequest &task_req,
                                                 int64_t node_id,
                                                 const NodeResources &resources) const {
-  int violations = 0;
-
   // First, check predefined resources.
   for (size_t i = 0; i < PredefinedResources_MAX; i++) {
     if (task_req.predefined_resources[i] > resources.predefined_resources[i].available) {
       // A hard constraint has been violated, so we cannot schedule
       // this task request.
-      return -1;
+      return false;
     }
   }
 
@@ -185,16 +187,16 @@ int64_t ClusterResourceScheduler::IsSchedulable(const TaskRequest &task_req,
     if (it == resources.custom_resources.end()) {
       // Requested resource doesn't exist at this node.
       // This is a hard constraint so cannot schedule this task request.
-      return -1;
+      return false;
     } else {
       if (task_req_custom_resource.second > it->second.available) {
         // Resource constraint is violated.
-        return -1;
+        return false;
       }
     }
   }
 
-  return violations;
+  return true;
 }
 
 int64_t ClusterResourceScheduler::GetBestSchedulableNodeSimpleBinPack(
@@ -204,9 +206,6 @@ int64_t ClusterResourceScheduler::GetBestSchedulableNodeSimpleBinPack(
   // being set.
   *is_infeasible = false;
 
-  // Minimum number of soft violations across all nodes that can schedule the request.
-  // We will pick the node with the smallest number of soft violations.
-  int64_t min_violations = INT_MAX;
   // Node associated to min_violations.
   std::vector<int64_t> best_nodes;
   *total_violations = 0;
@@ -217,8 +216,12 @@ int64_t ClusterResourceScheduler::GetBestSchedulableNodeSimpleBinPack(
   if (!force_spillback) {
     if (local_node_it != nodes_.end()) {
       if (IsSchedulable(task_req, local_node_it->first,
-                        local_node_it->second.GetLocalView()) == 0) {
+                        local_node_it->second.GetLocalView())) {
         return local_node_id_;
+      } else {
+        RAY_LOG(INFO) << "dbg: ClusterResourceScheduler::GetBestSchedulableNodeSimpleBinPack() not schedulable on local\n"
+                      << local_node_it->first << "\ntask_req=" << task_req.DebugString() << "\n"
+                      << local_node_it->second.GetLocalView().DebugString(string_to_int_map_);
       }
     }
   }
@@ -226,51 +229,36 @@ int64_t ClusterResourceScheduler::GetBestSchedulableNodeSimpleBinPack(
   bool local_node_feasible = IsFeasible(task_req, local_node_it->second.GetLocalView());
 
   for (const auto &node : nodes_) {
-    // Return -1 if node not schedulable. otherwise return the number
-    // of soft constraint violations.
-    int64_t violations = IsSchedulable(task_req, node.first, node.second.GetLocalView());
-    if (violations == -1) {
-      if (!local_node_feasible && best_nodes.empty() &&
-          IsFeasible(task_req, node.second.GetLocalView())) {
-        // If the local node is not feasible, and a better node has not yet
-        // been found, and this node does not currently have the resources
-        // available but is feasible, then schedule to this node.
-        // NOTE(swang): This is needed to make sure that tasks that are not
-        // feasible on this node are spilled back to a node that does have the
-        // appropriate total resources in a timely manner.
-        best_nodes.emplace_back(node.first);
-      }
-      continue;
-    }
-
     if (force_spillback && node.first == local_node_id_) {
       // Forcing spill back to remote node, so skip the local node.
       continue;
     }
 
-    // Update the node with the smallest number of soft constraints violated.
-    if (min_violations > violations) {
-      min_violations = violations;
-      // Clear should be performed by O(1) by the compiler because the
-      // vector entry type is int64_t.
-      best_nodes.clear();
+    const bool schedulable =
+        IsSchedulable(task_req, node.first, node.second.GetLocalView());
+    if (schedulable) {
+      best_nodes.emplace_back(node.first);
+      continue;
     }
-    if (min_violations == violations) {
+    RAY_LOG(INFO) << "dbg: ClusterResourceScheduler::GetBestSchedulableNodeSimpleBinPack() not schedulable on remote\n"
+                  << node.first << "\ntask_req=" << task_req.DebugString() << "\n"
+                  << node.second.GetLocalView().DebugString(string_to_int_map_);
+    if (!local_node_feasible && best_nodes.empty() &&
+        IsFeasible(task_req, node.second.GetLocalView())) {
+      // If the local node is not feasible, and a better node has not yet
+      // been found, and this node does not currently have the resources
+      // available but is feasible, then schedule to this node.
+      // NOTE(swang): This is needed to make sure that tasks that are not
+      // feasible on this node are spilled back to a node that does have the
+      // appropriate total resources in a timely manner.
       best_nodes.emplace_back(node.first);
     }
-  }
-  *total_violations = min_violations;
-
-  // Randomly select one of the best nodes to spillback.
-  int64_t best_node = -1;
-  if (!best_nodes.empty()) {
-    best_node = best_nodes[0];
   }
 
   // If there's no best node, and the task is not feasible locally,
   // it means the task is infeasible.
-  *is_infeasible = best_node == -1 && !local_node_feasible;
-  return best_node;
+  *is_infeasible = best_nodes.empty() && !local_node_feasible;
+  return best_nodes.empty() ? -1 : best_nodes[0];
 }
 
 int64_t ClusterResourceScheduler::GetBestSchedulableNode(const TaskRequest &task_req,
@@ -289,7 +277,7 @@ int64_t ClusterResourceScheduler::GetBestSchedulableNode(const TaskRequest &task
       int idx = distribution(gen_);
       best_node = std::next(nodes_.begin(), idx)->first;
     }
-    RAY_LOG(DEBUG) << "GetBestSchedulableNode, best_node = " << best_node
+    RAY_LOG(INFO) << "dbg: GetBestSchedulableNode, best_node = " << best_node
                    << ", # nodes = " << nodes_.size()
                    << ", task_req = " << task_req.DebugString();
     return best_node;
@@ -300,8 +288,16 @@ int64_t ClusterResourceScheduler::GetBestSchedulableNode(const TaskRequest &task
                                                total_violations, is_infeasible);
   }
 
+  RAY_LOG(INFO) << "dbg: ClusterResourceScheduler::GetBestSchedulableNode() hybrid_spillback, "
+                << "task_req = " << task_req.DebugString(string_to_int_map_);
   // TODO (Alex): Setting require_available == force_spillback is a hack in order to
   // remain bug compatible with the legacy scheduling algorithms.
+  for (const auto &node : nodes_) {
+    RAY_LOG(INFO) << "dbg: ClusterResourceScheduler::GetBestSchedulableNode() "
+                  << node.first << "\nNodeResources="
+                  << node.second.GetLocalView().DebugString(string_to_int_map_);
+  }
+
   int64_t best_node_id = raylet_scheduling_policy::HybridPolicy(
       task_req, local_node_id_, nodes_, spread_threshold_, force_spillback,
       force_spillback);
@@ -311,8 +307,9 @@ int64_t ClusterResourceScheduler::GetBestSchedulableNode(const TaskRequest &task
     *total_violations = 0;
   }
 
-  RAY_LOG(DEBUG) << "Scheduling decision. "
+  RAY_LOG(INFO) << "dbg: Scheduling decision. "
                  << "forcing spillback: " << force_spillback
+                 << " hybrid spillback: " << hybrid_spillback_
                  << ". Best node: " << best_node_id
                  << ", is infeasible: " << *is_infeasible;
   return best_node_id;
@@ -340,12 +337,15 @@ bool ClusterResourceScheduler::SubtractRemoteNodeAvailableResources(
 
   auto it = nodes_.find(node_id);
   if (it == nodes_.end()) {
+    RAY_LOG(INFO) << "dbg: ClusterResourceScheduler::SubtractRemoteNodeAvailableResources() node not found " << node_id;
     return false;
   }
   NodeResources *resources = it->second.GetMutableLocalView();
 
   // Just double check this node can still schedule the task request.
-  if (IsSchedulable(task_req, node_id, *resources) == -1) {
+  if (!IsSchedulable(task_req, node_id, *resources)) {
+    RAY_LOG(INFO) << "dbg: ClusterResourceScheduler::SubtractRemoteNodeAvailableResources() not schedulable\n"
+                  << node_id << "\n" << task_req.DebugString() << "\n" << resources->DebugString(string_to_int_map_);
     return false;
   }
 
@@ -734,6 +734,7 @@ bool ClusterResourceScheduler::AllocateTaskResourceInstances(
     const TaskRequest &task_req, std::shared_ptr<TaskResourceInstances> task_allocation) {
   RAY_CHECK(task_allocation != nullptr);
   if (nodes_.find(local_node_id_) == nodes_.end()) {
+    RAY_LOG(INFO) << "dbg: ClusterResourceScheduler::AllocateTaskResourceInstances() local node not found";
     return false;
   }
 
@@ -746,6 +747,7 @@ bool ClusterResourceScheduler::AllocateTaskResourceInstances(
         // Allocation failed. Restore node's local resources by freeing the resources
         // of the failed allocation.
         FreeTaskResourceInstances(task_allocation);
+        RAY_LOG(INFO) << "dbg: ClusterResourceScheduler::AllocateTaskResourceInstances() built-in resource allocation failed";
         return false;
       }
     }
@@ -765,10 +767,12 @@ bool ClusterResourceScheduler::AllocateTaskResourceInstances(
           // Allocation failed. Restore node's local resources by freeing the resources
           // of the failed allocation.
           FreeTaskResourceInstances(task_allocation);
+          RAY_LOG(INFO) << "dbg: ClusterResourceScheduler::AllocateTaskResourceInstances() custom resource allocation failed";
           return false;
         }
       }
     } else {
+      RAY_LOG(INFO) << "dbg: ClusterResourceScheduler::AllocateTaskResourceInstances() custom resource not found";
       return false;
     }
   }

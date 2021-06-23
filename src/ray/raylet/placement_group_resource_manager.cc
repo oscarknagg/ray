@@ -109,10 +109,17 @@ void NewPlacementGroupResourceManager::CommitBundle(
     const auto &instances =
         task_resource_instances.Get(original_resource_name, string_id_map);
 
+    RAY_LOG(INFO) << "dbg: CommitBundle adding resource " << resource_name << " " << original_resource_name << " " << instances.size();
     cluster_resource_scheduler_->AddLocalResourceInstances(resource_name, instances);
   }
   cluster_resource_scheduler_->UpdateLocalAvailableResourcesFromResourceInstances();
   update_resources_(cluster_resource_scheduler_->GetResourceTotals());
+
+  auto totals = cluster_resource_scheduler_->GetResourceTotals();
+  for (const auto &p : totals) {
+    RAY_LOG(INFO) << "dbg: CommitBundle GetResourceTotals() resource=" << p.first << " value="
+                  << p.second->ShortDebugString();
+  }
 }
 
 void NewPlacementGroupResourceManager::ReturnBundle(

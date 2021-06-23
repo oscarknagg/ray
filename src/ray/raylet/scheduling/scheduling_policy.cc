@@ -33,14 +33,17 @@ int64_t HybridPolicy(const TaskRequest &task_request, const int64_t local_node_i
   if (force_spillback) {
     // The first node will always be the local node. If we want to spillback, we can just
     // never consider scheduling locally.
+
+    RAY_LOG(INFO) << "dbg: HybridPolicy() forcing spillback";
     round_it++;
   }
   for (; round_it != round.end(); round_it++) {
-    const auto &node_id = *round_it;
+    const auto node_id = *round_it;
     const auto &it = nodes.find(node_id);
     RAY_CHECK(it != nodes.end());
     const auto &node = it->second;
     if (!node.GetLocalView().IsFeasible(task_request)) {
+      RAY_LOG(INFO) << "dbg: HybridPolicy() " << node_id << " infeasible";
       continue;
     }
 
@@ -50,6 +53,7 @@ int64_t HybridPolicy(const TaskRequest &task_request, const int64_t local_node_i
     if (critical_resource_utilization < spread_threshold) {
       critical_resource_utilization = 0;
     }
+    RAY_LOG(INFO) << "dbg: HybridPolicy() " << node_id << " is_available=" << is_available;
 
     bool update_best_node = false;
 

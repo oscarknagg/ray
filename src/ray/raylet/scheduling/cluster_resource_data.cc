@@ -298,7 +298,7 @@ std::string NodeResources::DebugString(StringIdMap string_to_in_map) const {
       buffer << "OBJECT_STORE_MEM: ";
       break;
     default:
-      RAY_CHECK(false) << "This should never happen.";
+      buffer << "unknown i=" << i << ": ";
       break;
     }
     buffer << "(" << this->predefined_resources[i].total << ":"
@@ -433,7 +433,7 @@ std::string NodeResourceInstances::DebugString(StringIdMap string_to_int_map) co
   }
   for (auto it = this->custom_resources.begin(); it != this->custom_resources.end();
        ++it) {
-    buffer << "\t" << it->first << ":(" << VectorToString(it->second.total) << ":"
+    buffer << "\t" << string_to_int_map.Get(it->first) << ":(" << VectorToString(it->second.total) << ":"
            << VectorToString(it->second.available) << ")\n";
   }
   buffer << "}" << std::endl;
@@ -469,7 +469,7 @@ bool TaskRequest::IsEmpty() const {
   return true;
 }
 
-std::string TaskRequest::DebugString() const {
+std::string TaskRequest::DebugString(StringIdMap string_to_int_map) const {
   std::stringstream buffer;
   buffer << " {";
   for (size_t i = 0; i < this->predefined_resources.size(); i++) {
@@ -478,9 +478,10 @@ std::string TaskRequest::DebugString() const {
   buffer << "}";
 
   buffer << "  [";
-  for (auto &it : this->custom_resources) {
-    buffer << it.first << ":"
-           << "(" << it.second << ") ";
+  for (auto &pair : this->custom_resources) {
+    auto name = string_to_int_map.Get(pair.first);
+    buffer << name << ":"
+           << "(" << pair.second << ") ";
   }
   buffer << "]" << std::endl;
   return buffer.str();

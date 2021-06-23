@@ -308,6 +308,10 @@ NodeManager::NodeManager(instrumented_io_context &io_service, const NodeID &self
       [this](const ray::gcs::NodeResourceInfoAccessor::ResourceMap &resources) {
         RAY_CHECK_OK(gcs_client_->NodeResources().AsyncUpdateResources(
             self_node_id_, resources, nullptr));
+        auto totals = cluster_resource_scheduler_->GetResourceTotals();
+        for (const auto &p : totals) {
+          RAY_LOG(INFO) << "dbg: AsyncUpdateResources resource=" << p.first << " value=" << p.second;
+        }
       },
       [this](const std::vector<std::string> &resource_names) {
         RAY_CHECK_OK(gcs_client_->NodeResources().AsyncDeleteResources(
@@ -730,7 +734,6 @@ void NodeManager::WarnResourceDeadlock() {
   // case resource_deadlock_warned_:  0 => first time, don't do anything yet
   // case resource_deadlock_warned_:  1 => second time, print a warning
   // case resource_deadlock_warned_: >1 => global gc but don't print any warnings
-  std::ostringstream error_message;
   if (any_pending && resource_deadlock_warned_++ > 0) {
     // Actor references may be caught in cycles, preventing them from being deleted.
     // Trigger global GC to hopefully free up resource slots.
@@ -741,6 +744,7 @@ void NodeManager::WarnResourceDeadlock() {
       return;
     }
 
+    std::ostringstream error_message;
     error_message
         << "The actor or task with ID " << exemplar.GetTaskSpecification().TaskId()
         << " cannot be scheduled right now. It requires "
@@ -763,6 +767,7 @@ void NodeManager::WarnResourceDeadlock() {
   }
   // Try scheduling tasks. Without this, if there's no more tasks coming in, deadlocked
   // tasks are never be scheduled.
+  RAY_LOG(WARNING) << "dbg: WarnResourceDeadlock ScheduleAndDispatchTasks";
   cluster_task_manager_->ScheduleAndDispatchTasks();
 }
 
@@ -1295,7 +1300,7 @@ void NodeManager::DisconnectClient(
     // Return the resources that were being used by this worker.
     cluster_task_manager_->ReleaseWorkerResources(worker);
 
-    // Since some resources may have been released, we can try to dispatch more tasks. YYY
+    // Since some resources may have been released, we can try to dispatch more tasks.
     cluster_task_manager_->ScheduleAndDispatchTasks();
   } else if (is_driver) {
     // The client is a driver.
@@ -1906,7 +1911,6 @@ void NodeManager::FinishAssignedActorCreationTask(WorkerInterface &worker,
     auto job_config = worker_pool_.GetJobConfig(job_id);
     RAY_CHECK(job_config);
     runtime_env_manager_.AddURIReference(actor_id.Hex(), job_config->runtime_env());
-    ;
   }
 }
 

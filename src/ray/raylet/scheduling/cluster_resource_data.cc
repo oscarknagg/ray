@@ -298,7 +298,7 @@ std::string NodeResources::DebugString(StringIdMap string_to_in_map) const {
       buffer << "OBJECT_STORE_MEM: ";
       break;
     default:
-      RAY_CHECK(false) << "This should never happen.";
+      buffer << "unknown i=" << i << ": ";
       break;
     }
     buffer << "(" << this->predefined_resources[i].total << ":"

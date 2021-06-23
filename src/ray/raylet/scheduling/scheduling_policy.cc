@@ -33,6 +33,8 @@ int64_t HybridPolicy(const TaskRequest &task_request, const int64_t local_node_i
   if (force_spillback) {
     // The first node will always be the local node. If we want to spillback, we can just
     // never consider scheduling locally.
+
+    RAY_LOG(INFO) << "dbg: ClusterResourceScheduler::GetBestSchedulableNode() forcing spillback";
     round_it++;
   }
   for (; round_it != round.end(); round_it++) {
@@ -41,6 +43,7 @@ int64_t HybridPolicy(const TaskRequest &task_request, const int64_t local_node_i
     RAY_CHECK(it != nodes.end());
     const auto &node = it->second;
     if (!node.GetLocalView().IsFeasible(task_request)) {
+      RAY_LOG(INFO) << "dbg: ClusterResourceScheduler::GetBestSchedulableNode() infeasible";
       continue;
     }
 
@@ -50,6 +53,7 @@ int64_t HybridPolicy(const TaskRequest &task_request, const int64_t local_node_i
     if (critical_resource_utilization < spread_threshold) {
       critical_resource_utilization = 0;
     }
+    RAY_LOG(INFO) << "dbg: ClusterResourceScheduler::GetBestSchedulableNode() is_available=" << is_available;
 
     bool update_best_node = false;
 

@@ -27,7 +27,7 @@ std::string StringIdMap::Get(uint64_t id) const {
   std::string id_string;
   auto it = int_to_string_.find(id);
   if (it == int_to_string_.end()) {
-    id_string = "-1";
+    id_string = absl::StrCat(id);
   } else {
     id_string = it->second;
   }

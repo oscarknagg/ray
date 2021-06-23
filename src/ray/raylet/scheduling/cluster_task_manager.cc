@@ -46,10 +46,13 @@ bool ClusterTaskManager::SchedulePendingTasks() {
   // Always try to schedule infeasible tasks in case they are now feasible.
   TryLocalInfeasibleTaskScheduling();
   bool did_schedule = false;
+  RAY_LOG(INFO) << "dbg: ClusterTaskManager::SchedulePendingTasks(): tasks_to_schedule_.size()="
+                << tasks_to_schedule_.size();
   for (auto shapes_it = tasks_to_schedule_.begin();
        shapes_it != tasks_to_schedule_.end();) {
     auto &work_queue = shapes_it->second;
     bool is_infeasible = false;
+    RAY_LOG(INFO) << "dbg: ClusterTaskManager::SchedulePendingTasks(): work_queue.size()=" << work_queue.size();
     for (auto work_it = work_queue.begin(); work_it != work_queue.end();) {
       // Check every task in task_to_schedule queue to see
       // whether it can be scheduled. This avoids head-of-line
@@ -58,21 +61,21 @@ bool ClusterTaskManager::SchedulePendingTasks() {
       // tasks from being scheduled.
       const Work &work = *work_it;
       Task task = std::get<0>(work);
-      RAY_LOG(DEBUG) << "Scheduling pending task "
+      RAY_LOG(INFO) << "dbg: Scheduling pending task "
                      << task.GetTaskSpecification().TaskId();
       auto placement_resources =
           task.GetTaskSpecification().GetRequiredPlacementResources().GetResourceMap();
       // This argument is used to set violation, which is an unsupported feature now.
-      int64_t _unused;
+      int64_t unused;
       std::string node_id_string = cluster_resource_scheduler_->GetBestSchedulableNode(
           placement_resources, task.GetTaskSpecification().IsActorCreationTask(),
-          /*force_spillback=*/false, &_unused, &is_infeasible);
+          /*force_spillback=*/false, &unused, &is_infeasible);
 
       // There is no node that has available resources to run the request.
       // Move on to the next shape.
       if (node_id_string.empty()) {
-        RAY_LOG(DEBUG) << "No node found to schedule a task "
-                       << task.GetTaskSpecification().TaskId() << " is infeasible?"
+        RAY_LOG(INFO) << "dbg: No node found to schedule a task "
+                       << task.GetTaskSpecification().TaskId() << " is_infeasible="
                        << is_infeasible;
         break;
       }
@@ -82,10 +85,12 @@ bool ClusterTaskManager::SchedulePendingTasks() {
         // circuit if did_schedule is true).
         bool task_scheduled = WaitForTaskArgsRequests(work);
         did_schedule = task_scheduled || did_schedule;
+        RAY_LOG(INFO) << "dbg: ClusterTaskManager::SchedulePendingTasks(): did_schedule";
       } else {
         // Should spill over to a different node.
         NodeID node_id = NodeID::FromBinary(node_id_string);
         Spillback(node_id, work);
+        RAY_LOG(INFO) << "dbg: ClusterTaskManager::SchedulePendingTasks(): Spillback attempted " << node_id_string << " vs " << self_node_id_.Binary();
       }
       work_it = work_queue.erase(work_it);
     }
@@ -300,11 +305,6 @@ void ClusterTaskManager::QueueAndScheduleTask(
   }
   AddToBacklogTracker(task);
   ScheduleAndDispatchTasks();
-}
-
-void ClusterTaskManager::ScheduleInfeasibleTasks() {
-  // Do nothing.
-  // TODO(Shanly): This method will be removed once we remove the legacy scheduler.
 }
 
 void ClusterTaskManager::TasksUnblocked(const std::vector<TaskID> &ready_ids) {
@@ -800,6 +800,7 @@ void ClusterTaskManager::RecordMetrics() {
 }
 
 void ClusterTaskManager::TryLocalInfeasibleTaskScheduling() {
+  RAY_LOG(INFO) << "dbg: ClusterTaskManager::TryLocalInfeasibleTaskScheduling(): infeasible_tasks_.size()=" << infeasible_tasks_.size();
   for (auto shapes_it = infeasible_tasks_.begin();
        shapes_it != infeasible_tasks_.end();) {
     auto &work_queue = shapes_it->second;
@@ -809,25 +810,25 @@ void ClusterTaskManager::TryLocalInfeasibleTaskScheduling() {
     // If the first entry is infeasible, that means everything else is the same.
     const auto work = work_queue[0];
     Task task = std::get<0>(work);
-    RAY_LOG(DEBUG) << "Check if the infeasible task is schedulable in any node. task_id:"
+    RAY_LOG(INFO) << "dbg: Check if the infeasible task is schedulable in any node. task_id:"
                    << task.GetTaskSpecification().TaskId();
     auto placement_resources =
         task.GetTaskSpecification().GetRequiredPlacementResources().GetResourceMap();
     // This argument is used to set violation, which is an unsupported feature now.
-    int64_t _unused;
+    int64_t unused;
     bool is_infeasible;
     std::string node_id_string = cluster_resource_scheduler_->GetBestSchedulableNode(
         placement_resources, task.GetTaskSpecification().IsActorCreationTask(),
-        /*force_spillback=*/false, &_unused, &is_infeasible);
+        /*force_spillback=*/false, &unused, &is_infeasible);
 
     // There is no node that has available resources to run the request.
     // Move on to the next shape.
     if (is_infeasible) {
-      RAY_LOG(DEBUG) << "No feasible node found for task "
+      RAY_LOG(INFO) << "dbg: No feasible node found for task "
                      << task.GetTaskSpecification().TaskId();
       shapes_it++;
     } else {
-      RAY_LOG(DEBUG) << "Infeasible task of task id "
+      RAY_LOG(INFO) << "dbg: Infeasible task of task id "
                      << task.GetTaskSpecification().TaskId()
                      << " is now feasible. Move the entry back to tasks_to_schedule_";
       tasks_to_schedule_[shapes_it->first] = shapes_it->second;
@@ -920,7 +921,7 @@ void ClusterTaskManager::Spillback(const NodeID &spillback_to, const Work &work)
   const auto &task = std::get<0>(work);
   const auto &task_spec = task.GetTaskSpecification();
   RemoveFromBacklogTracker(task);
-  RAY_LOG(DEBUG) << "Spilling task " << task_spec.TaskId() << " to node " << spillback_to;
+  RAY_LOG(INFO) << "dbg: Spilling task " << task_spec.TaskId() << " to node " << spillback_to;
 
   if (!cluster_resource_scheduler_->AllocateRemoteTaskResources(
           spillback_to.Binary(), task_spec.GetRequiredResources().GetResourceMap())) {

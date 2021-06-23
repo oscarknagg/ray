@@ -113,6 +113,11 @@ void NewPlacementGroupResourceManager::CommitBundle(
   }
   cluster_resource_scheduler_->UpdateLocalAvailableResourcesFromResourceInstances();
   update_resources_(cluster_resource_scheduler_->GetResourceTotals());
+  auto totals = cluster_resource_scheduler_->GetResourceTotals();
+  for (const auto &p : totals) {
+    RAY_LOG(INFO) << "dbg: CommitBundle resource=" << p.first << " value="
+                  << p.second->ShortDebugString();
+  }
 }
 
 void NewPlacementGroupResourceManager::ReturnBundle(

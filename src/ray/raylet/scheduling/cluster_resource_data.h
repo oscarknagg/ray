@@ -63,7 +63,7 @@ class TaskRequest {
   /// Check whether the request contains no resources.
   bool IsEmpty() const;
   /// Returns human-readable string for this task request.
-  std::string DebugString() const;
+  std::string DebugString(StringIdMap string_to_int_map = {}) const;
 };
 
 // Data structure specifying the capacity of each instance of each resource
@@ -158,9 +158,9 @@ class NodeResources {
   bool operator==(const NodeResources &other);
   bool operator!=(const NodeResources &other);
   /// Returns human-readable string for these resources.
-  std::string DebugString(StringIdMap string_to_int_map) const;
+  std::string DebugString(StringIdMap string_to_int_map = {}) const;
   /// Returns compact dict-like string.
-  std::string DictString(StringIdMap string_to_int_map) const;
+  std::string DictString(StringIdMap string_to_int_map = {}) const;
 };
 
 /// Total and available capacities of each resource instance.

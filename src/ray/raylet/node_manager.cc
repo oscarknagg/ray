@@ -308,6 +308,10 @@ NodeManager::NodeManager(instrumented_io_context &io_service, const NodeID &self
       [this](const ray::gcs::NodeResourceInfoAccessor::ResourceMap &resources) {
         RAY_CHECK_OK(gcs_client_->NodeResources().AsyncUpdateResources(
             self_node_id_, resources, nullptr));
+        auto totals = cluster_resource_scheduler_->GetResourceTotals();
+        for (const auto &p : totals) {
+          RAY_LOG(INFO) << "dbg: AsyncUpdateResources resource=" << p.first << " value=" << p.second;
+        }
       },
       [this](const std::vector<std::string> &resource_names) {
         RAY_CHECK_OK(gcs_client_->NodeResources().AsyncDeleteResources(

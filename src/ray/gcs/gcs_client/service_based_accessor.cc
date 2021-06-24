@@ -710,13 +710,14 @@ Status ServiceBasedNodeResourceInfoAccessor::AsyncUpdateResources(
             callback(status);
           }
           RAY_LOG(INFO) << "dbg: Finished updating node resources, status = " << status
-                         << ", node id = " << node_id;
+                        << ", node id = " << node_id;
           done_callback();
         });
   };
 
   sequencer_.Post(node_id, operation);
-  RAY_LOG(INFO) << "dbg: AsyncUpdateResources posted operation";
+  RAY_LOG(INFO) << "dbg: ServiceBasedNodeResourceInfoAccessor::AsyncUpdateResources "
+                   "posted operation";
   return Status::OK();
 }
 

@@ -17,6 +17,7 @@
 #include <cctype>
 #include <fstream>
 #include <memory>
+
 #include "boost/filesystem.hpp"
 #include "boost/system/error_code.hpp"
 #include "ray/common/asio/asio_util.h"
@@ -208,15 +209,15 @@ NodeManager::NodeManager(instrumented_io_context &io_service, const NodeID &self
       report_resources_period_ms_(config.report_resources_period_ms),
       temp_dir_(config.temp_dir),
       initial_config_(config),
-      worker_pool_(io_service, self_node_id_, config.node_manager_address,
-                   config.num_workers_soft_limit,
-                   config.num_initial_python_workers_for_first_job,
-                   config.maximum_startup_concurrency, config.min_worker_port,
-                   config.max_worker_port, config.worker_ports, gcs_client_,
-                   config.worker_commands,
-                   /*starting_worker_timeout_callback=*/
-                   [this] { cluster_task_manager_->ScheduleAndDispatchTasks(); },
-                   /*get_time=*/[]() { return absl::GetCurrentTimeNanos() / 1e6; }),
+      worker_pool_(
+          io_service, self_node_id_, config.node_manager_address,
+          config.num_workers_soft_limit, config.num_initial_python_workers_for_first_job,
+          config.maximum_startup_concurrency, config.min_worker_port,
+          config.max_worker_port, config.worker_ports, gcs_client_,
+          config.worker_commands,
+          /*starting_worker_timeout_callback=*/
+          [this] { cluster_task_manager_->ScheduleAndDispatchTasks(); },
+          /*get_time=*/[]() { return absl::GetCurrentTimeNanos() / 1e6; }),
       dependency_manager_(object_manager_),
       node_manager_server_("NodeManager", config.node_manager_port),
       node_manager_service_(io_service, *this),
@@ -307,15 +308,19 @@ NodeManager::NodeManager(instrumented_io_context &io_service, const NodeID &self
       // them, do them with the lightweight heartbeat, etc).
       [this](const ray::gcs::NodeResourceInfoAccessor::ResourceMap &resources) {
         RAY_CHECK_OK(gcs_client_->NodeResources().AsyncUpdateResources(
-            self_node_id_, resources, nullptr));
+            self_node_id_, resources, [this](Status status) {
+              RAY_CHECK_OK(status);
+              cluster_task_manager_->ScheduleAndDispatchTasks();
+            }));
         auto totals = cluster_resource_scheduler_->GetResourceTotals();
         for (const auto &p : totals) {
-          RAY_LOG(INFO) << "dbg: AsyncUpdateResources resource=" << p.first << " value=" << p.second;
+          RAY_LOG(INFO) << "dbg: AsyncUpdateResources resource=" << p.first
+                        << " value=" << p.second;
         }
       },
       [this](const std::vector<std::string> &resource_names) {
         RAY_CHECK_OK(gcs_client_->NodeResources().AsyncDeleteResources(
-            self_node_id_, resource_names, nullptr));
+            self_node_id_, resource_names, [](Status status) { RAY_CHECK_OK(status); }));
       });
 
   RAY_CHECK_OK(store_client_.Connect(config.store_socket_name.c_str()));
@@ -734,36 +739,34 @@ void NodeManager::WarnResourceDeadlock() {
   // case resource_deadlock_warned_:  0 => first time, don't do anything yet
   // case resource_deadlock_warned_:  1 => second time, print a warning
   // case resource_deadlock_warned_: >1 => global gc but don't print any warnings
-  if (any_pending && resource_deadlock_warned_++ > 0) {
+  if (any_pending) {
     // Actor references may be caught in cycles, preventing them from being deleted.
     // Trigger global GC to hopefully free up resource slots.
     TriggerGlobalGC();
 
     // Suppress duplicates warning messages.
-    if (resource_deadlock_warned_ > 2) {
-      return;
+    if (resource_deadlock_warned_++ < 1) {
+      std::ostringstream error_message;
+      error_message
+          << "The actor or task with ID " << exemplar.GetTaskSpecification().TaskId()
+          << " cannot be scheduled right now. It requires "
+          << exemplar.GetTaskSpecification().GetRequiredPlacementResources().ToString()
+          << " for placement, but this node only has remaining " << available_resources
+          << ". In total there are " << pending_tasks << " pending tasks and "
+          << pending_actor_creations << " pending actors on this node. "
+          << "This is likely due to all cluster resources being claimed by actors. "
+          << "To resolve the issue, consider creating fewer actors or increase the "
+          << "resources available to this Ray cluster. You can ignore this message "
+          << "if this Ray cluster is expected to auto-scale or if you specified a "
+          << "runtime_env for this task or actor because it takes time to install.";
+
+      std::string error_message_str = error_message.str();
+      RAY_LOG(WARNING) << error_message_str;
+      auto error_data_ptr = gcs::CreateErrorTableData(
+          "resource_deadlock", error_message_str, current_time_ms(),
+          exemplar.GetTaskSpecification().JobId());
+      RAY_CHECK_OK(gcs_client_->Errors().AsyncReportJobError(error_data_ptr, nullptr));
     }
-
-    std::ostringstream error_message;
-    error_message
-        << "The actor or task with ID " << exemplar.GetTaskSpecification().TaskId()
-        << " cannot be scheduled right now. It requires "
-        << exemplar.GetTaskSpecification().GetRequiredPlacementResources().ToString()
-        << " for placement, but this node only has remaining " << available_resources
-        << ". In total there are " << pending_tasks << " pending tasks and "
-        << pending_actor_creations << " pending actors on this node. "
-        << "This is likely due to all cluster resources being claimed by actors. "
-        << "To resolve the issue, consider creating fewer actors or increase the "
-        << "resources available to this Ray cluster. You can ignore this message "
-        << "if this Ray cluster is expected to auto-scale or if you specified a "
-        << "runtime_env for this task or actor because it takes time to install.";
-
-    std::string error_message_str = error_message.str();
-    RAY_LOG(WARNING) << error_message_str;
-    auto error_data_ptr = gcs::CreateErrorTableData(
-        "resource_deadlock", error_message_str, current_time_ms(),
-        exemplar.GetTaskSpecification().JobId());
-    RAY_CHECK_OK(gcs_client_->Errors().AsyncReportJobError(error_data_ptr, nullptr));
   }
   // Try scheduling tasks. Without this, if there's no more tasks coming in, deadlocked
   // tasks are never be scheduled.

@@ -216,7 +216,9 @@ NodeManager::NodeManager(instrumented_io_context &io_service, const NodeID &self
                    config.max_worker_port, config.worker_ports, gcs_client_,
                    config.worker_commands,
                    /*starting_worker_timeout_callback=*/
-                   [this] { cluster_task_manager_->ScheduleAndDispatchTasks(); },
+                   [this] {
+                       RAY_LOG(INFO) << "dbg: starting_worker_timeout_callback scheduling";
+                       cluster_task_manager_->ScheduleAndDispatchTasks(); },
                    /*get_time=*/[]() { return absl::GetCurrentTimeNanos() / 1e6; }),
       dependency_manager_(object_manager_),
       node_manager_server_("NodeManager", config.node_manager_port),
@@ -310,6 +312,7 @@ NodeManager::NodeManager(instrumented_io_context &io_service, const NodeID &self
         RAY_CHECK_OK(gcs_client_->NodeResources().AsyncUpdateResources(
             self_node_id_, resources, [this](Status status) {
               RAY_CHECK_OK(status);
+              RAY_LOG(INFO) << "dbg: placement_group_resource_manager_ scheduling";
               cluster_task_manager_->ScheduleAndDispatchTasks();
             }));
         auto totals = cluster_resource_scheduler_->GetResourceTotals();
@@ -518,6 +521,7 @@ void NodeManager::HandleJobStarted(const JobID &job_id, const JobTableData &job_
   // Tasks of this job may already arrived but failed to pop a worker because the job
   // config is not local yet. So we trigger dispatching again here to try to
   // reschedule these tasks.
+  RAY_LOG(INFO) << "dbg: NodeManager::HandleJobStarted() scheduling";
   cluster_task_manager_->ScheduleAndDispatchTasks();
 }
 
@@ -918,6 +922,7 @@ void NodeManager::ResourceCreateUpdated(const NodeID &node_id,
 
   if (node_id == self_node_id_) {
     // The resource update is on the local node, check if we can reschedule tasks.
+    RAY_LOG(INFO) << "dbg: NodeManager::ResourceCreateUpdated() scheduling";
     cluster_task_manager_->ScheduleAndDispatchTasks();
   }
 }
@@ -957,6 +962,7 @@ void NodeManager::UpdateResourceUsage(const NodeID &node_id,
 
   // If light resource usage report enabled, we update remote resources only when related
   // resources map in heartbeat is not empty.
+  RAY_LOG(INFO) << "dbg: NodeManager::UpdateResourceUsage() scheduling";
   cluster_task_manager_->ScheduleAndDispatchTasks();
 }
 
@@ -1123,6 +1129,7 @@ void NodeManager::ProcessRegisterClientRequestMessage(
       // If the worker failed to register to Raylet, trigger task dispatching here to
       // allow new worker processes to be started (if capped by
       // maximum_startup_concurrency).
+      RAY_LOG(INFO) << "dbg: NodeManager::ProcessRegisterClientRequestMessage() scheduling";
       cluster_task_manager_->ScheduleAndDispatchTasks();
     }
   } else {
@@ -1201,7 +1208,7 @@ void NodeManager::HandleWorkerAvailable(const std::shared_ptr<WorkerInterface> &
     // Return the worker to the idle pool.
     worker_pool_.PushWorker(worker);
   }
-
+  RAY_LOG(INFO) << "dbg: NodeManager::HandleWorkerAvailable() scheduling";
   cluster_task_manager_->ScheduleAndDispatchTasks();
 }
 
@@ -1304,6 +1311,7 @@ void NodeManager::DisconnectClient(
     cluster_task_manager_->ReleaseWorkerResources(worker);
 
     // Since some resources may have been released, we can try to dispatch more tasks.
+    RAY_LOG(INFO) << "dbg: NodeManager::DisconnectClient() scheduling";
     cluster_task_manager_->ScheduleAndDispatchTasks();
   } else if (is_driver) {
     // The client is a driver.
@@ -1653,6 +1661,7 @@ void NodeManager::HandleCommitBundleResources(
                  << bundle_spec.DebugString();
   placement_group_resource_manager_->CommitBundle(bundle_spec);
   send_reply_callback(Status::OK(), nullptr, nullptr);
+  RAY_LOG(INFO) << "dbg: NodeManager::HandleCommitBundleResources() scheduling";
   cluster_task_manager_->ScheduleAndDispatchTasks();
 }
 
@@ -1687,6 +1696,7 @@ void NodeManager::HandleCancelResourceReserve(
 
   // Return bundle resources.
   placement_group_resource_manager_->ReturnBundle(bundle_spec);
+  RAY_LOG(INFO) << "dbg: NodeManager::HandleReturnBundleResources() scheduling";
   cluster_task_manager_->ScheduleAndDispatchTasks();
   send_reply_callback(Status::OK(), nullptr, nullptr);
 }
@@ -1796,6 +1806,7 @@ void NodeManager::HandleDirectCallTaskBlocked(
     return;  // The worker may have died or is no longer processing the task.
   }
   cluster_task_manager_->ReleaseCpuResourcesFromUnblockedWorker(worker);
+  RAY_LOG(INFO) << "dbg: NodeManager::HandleDirectCallTaskBlocked() scheduling";
   cluster_task_manager_->ScheduleAndDispatchTasks();
 }
 
@@ -1811,6 +1822,7 @@ void NodeManager::HandleDirectCallTaskUnblocked(
 
   if (worker->IsBlocked()) {
     cluster_task_manager_->ReturnCpuResourcesToBlockedWorker(worker);
+    RAY_LOG(INFO) << "dbg: NodeManager::HandleDirectCallTaskUnblocked() scheduling";
     cluster_task_manager_->ScheduleAndDispatchTasks();
   }
 }

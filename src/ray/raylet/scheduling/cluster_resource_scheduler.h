@@ -106,11 +106,10 @@ class ClusterResourceScheduler : public ClusterResourceSchedulerInterface {
   ///     are available when we call this function, and this way we avoid
   ///     a map find call which could be expensive.)
   ///
-  ///  \return: -1, if the request cannot be scheduled. This happens when at
+  ///  \return: false, if the request cannot be scheduled. This happens when at
   ///           least a hard constraints is violated.
-  ///           >= 0, the number soft constraint violations. If 0, no
-  ///           constraint is violated.
-  int64_t IsSchedulable(const TaskRequest &task_req, int64_t node_id,
+  ///           true, if the request can be scheduled.
+  bool IsSchedulable(const TaskRequest &task_req, int64_t node_id,
                         const NodeResources &resources) const;
 
   ///  Find a node in the cluster on which we can schedule a given task request.
@@ -399,7 +398,7 @@ class ClusterResourceScheduler : public ClusterResourceSchedulerInterface {
   ///
   /// Example: Assume the local node has four GPU instances with the
   /// following availabilities: 0.2, 0.3, 0.1, 1. Then the total GPU
-  // resources availabile at that node is 0.2 + 0.3 + 0.1 + 1. = 1.6
+  /// resources availabile at that node is 0.2 + 0.3 + 0.1 + 1. = 1.6
   void UpdateLocalAvailableResourcesFromResourceInstances();
 
   /// Populate the relevant parts of the heartbeat table. This is intended for

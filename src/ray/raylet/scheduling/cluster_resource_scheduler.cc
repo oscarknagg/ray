@@ -164,17 +164,15 @@ bool ClusterResourceScheduler::IsFeasible(const TaskRequest &task_req,
   return true;
 }
 
-int64_t ClusterResourceScheduler::IsSchedulable(const TaskRequest &task_req,
+bool ClusterResourceScheduler::IsSchedulable(const TaskRequest &task_req,
                                                 int64_t node_id,
                                                 const NodeResources &resources) const {
-  int violations = 0;
-
   // First, check predefined resources.
   for (size_t i = 0; i < PredefinedResources_MAX; i++) {
     if (task_req.predefined_resources[i] > resources.predefined_resources[i].available) {
       // A hard constraint has been violated, so we cannot schedule
       // this task request.
-      return -1;
+      return false;
     }
   }
 
@@ -185,16 +183,16 @@ int64_t ClusterResourceScheduler::IsSchedulable(const TaskRequest &task_req,
     if (it == resources.custom_resources.end()) {
       // Requested resource doesn't exist at this node.
       // This is a hard constraint so cannot schedule this task request.
-      return -1;
+      return false;
     } else {
       if (task_req_custom_resource.second > it->second.available) {
         // Resource constraint is violated.
-        return -1;
+        return false;
       }
     }
   }
 
-  return violations;
+  return true;
 }
 
 int64_t ClusterResourceScheduler::GetBestSchedulableNodeSimpleBinPack(
@@ -204,9 +202,6 @@ int64_t ClusterResourceScheduler::GetBestSchedulableNodeSimpleBinPack(
   // being set.
   *is_infeasible = false;
 
-  // Minimum number of soft violations across all nodes that can schedule the request.
-  // We will pick the node with the smallest number of soft violations.
-  int64_t min_violations = INT_MAX;
   // Node associated to min_violations.
   std::vector<int64_t> best_nodes;
   *total_violations = 0;
@@ -217,7 +212,7 @@ int64_t ClusterResourceScheduler::GetBestSchedulableNodeSimpleBinPack(
   if (!force_spillback) {
     if (local_node_it != nodes_.end()) {
       if (IsSchedulable(task_req, local_node_it->first,
-                        local_node_it->second.GetLocalView()) == 0) {
+                        local_node_it->second.GetLocalView())) {
         return local_node_id_;
       }
     }
@@ -226,10 +221,9 @@ int64_t ClusterResourceScheduler::GetBestSchedulableNodeSimpleBinPack(
   bool local_node_feasible = IsFeasible(task_req, local_node_it->second.GetLocalView());
 
   for (const auto &node : nodes_) {
-    // Return -1 if node not schedulable. otherwise return the number
-    // of soft constraint violations.
-    int64_t violations = IsSchedulable(task_req, node.first, node.second.GetLocalView());
-    if (violations == -1) {
+    const bool schedulable =
+        IsSchedulable(task_req, node.first, node.second.GetLocalView());
+    if (!schedulable) {
       if (!local_node_feasible && best_nodes.empty() &&
           IsFeasible(task_req, node.second.GetLocalView())) {
         // If the local node is not feasible, and a better node has not yet
@@ -249,17 +243,10 @@ int64_t ClusterResourceScheduler::GetBestSchedulableNodeSimpleBinPack(
     }
 
     // Update the node with the smallest number of soft constraints violated.
-    if (min_violations > violations) {
-      min_violations = violations;
-      // Clear should be performed by O(1) by the compiler because the
-      // vector entry type is int64_t.
-      best_nodes.clear();
-    }
-    if (min_violations == violations) {
+    if (schedulable) {
       best_nodes.emplace_back(node.first);
     }
   }
-  *total_violations = min_violations;
 
   // Randomly select one of the best nodes to spillback.
   int64_t best_node = -1;
@@ -340,12 +327,14 @@ bool ClusterResourceScheduler::SubtractRemoteNodeAvailableResources(
 
   auto it = nodes_.find(node_id);
   if (it == nodes_.end()) {
+    RAY_LOG(INFO) << "dbg: ClusterResourceScheduler::SubtractRemoteNodeAvailableResources() node not found " << node_id;
     return false;
   }
   NodeResources *resources = it->second.GetMutableLocalView();
 
   // Just double check this node can still schedule the task request.
-  if (IsSchedulable(task_req, node_id, *resources) == -1) {
+  if (!IsSchedulable(task_req, node_id, *resources)) {
+    RAY_LOG(INFO) << "dbg: ClusterResourceScheduler::SubtractRemoteNodeAvailableResources() not schedulable " << node_id << " " << resources->DebugString(string_to_int_map_);
     return false;
   }
 

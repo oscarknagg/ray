@@ -65,16 +65,16 @@ bool ClusterTaskManager::SchedulePendingTasks() {
       auto placement_resources =
           task.GetTaskSpecification().GetRequiredPlacementResources().GetResourceMap();
       // This argument is used to set violation, which is an unsupported feature now.
-      int64_t _unused;
+      int64_t unused;
       std::string node_id_string = cluster_resource_scheduler_->GetBestSchedulableNode(
           placement_resources, task.GetTaskSpecification().IsActorCreationTask(),
-          /*force_spillback=*/false, &_unused, &is_infeasible);
+          /*force_spillback=*/false, &unused, &is_infeasible);
 
       // There is no node that has available resources to run the request.
       // Move on to the next shape.
       if (node_id_string.empty()) {
         RAY_LOG(INFO) << "dbg: No node found to schedule a task "
-                       << task.GetTaskSpecification().TaskId() << " is infeasible?"
+                       << task.GetTaskSpecification().TaskId() << " is_infeasible="
                        << is_infeasible;
         break;
       }

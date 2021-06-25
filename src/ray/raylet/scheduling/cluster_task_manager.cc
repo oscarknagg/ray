@@ -274,7 +274,7 @@ bool ClusterTaskManager::TrySpillback(const Work &work, bool &is_infeasible) {
   auto placement_resources = spec.GetRequiredPlacementResources().GetResourceMap();
   RAY_LOG(INFO) << "dbg: ClusterTaskManager::TrySpillback() Spillback ";
   std::string node_id_string = cluster_resource_scheduler_->GetBestSchedulableNode(
-      placement_resources, spec.IsActorCreationTask(), /*force_spillback=*/false,
+      placement_resources, spec.IsActorCreationTask(), /*force_spillback=*/true,
       &_unused, &is_infeasible);
 
   if (is_infeasible || node_id_string == self_node_id_.Binary() ||

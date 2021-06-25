@@ -795,6 +795,7 @@ void ClusterResourceScheduler::UpdateLocalAvailableResourcesFromResourceInstance
   RAY_CHECK(it_local_node != nodes_.end());
 
   auto local_view = it_local_node->second.GetMutableLocalView();
+  RAY_CHECK(local_view->predefined_resources.size() == local_resources_.predefined_resources.size());
   for (size_t i = 0; i < PredefinedResources_MAX; i++) {
     local_view->predefined_resources[i].available = 0;
     for (size_t j = 0; j < local_resources_.predefined_resources[i].available.size();
@@ -803,7 +804,13 @@ void ClusterResourceScheduler::UpdateLocalAvailableResourcesFromResourceInstance
           local_resources_.predefined_resources[i].available[j];
     }
   }
-
+  for (auto it = local_view->custom_resources.begin(), end = local_view->custom_resources.end(); it != end;) {
+    if (local_resources_.custom_resources.contains(it->first)) {
+      ++it;
+    } else {
+      local_view->custom_resources.erase(it++);
+    }
+  }
   for (auto &custom_resource : local_resources_.custom_resources) {
     int64_t resource_name = custom_resource.first;
     auto &instances = custom_resource.second;

@@ -520,6 +520,7 @@ void ClusterResourceScheduler::DeleteLocalResource(const std::string &resource_n
 void ClusterResourceScheduler::DeleteResource(const std::string &node_id_string,
                                               const std::string &resource_name) {
   int64_t node_id = string_to_int_map_.Get(node_id_string);
+  RAY_LOG(INFO) << "dbg: DeleteResource() node_id=" << node_id;
   auto it = nodes_.find(node_id);
   if (it == nodes_.end()) {
     return;
@@ -559,6 +560,9 @@ void ClusterResourceScheduler::DeleteResource(const std::string &node_id_string,
       local_resources_.custom_resources.erase(c_itr);
     }
   }
+
+  RAY_LOG(INFO) << "dbg: DeleteResource() local_view=" << local_view->DebugString(string_to_int_map_);
+  RAY_LOG(INFO) << "dbg: DeleteResource() local_resources_=" << local_resources_.DebugString(string_to_int_map_);
 }
 
 std::string ClusterResourceScheduler::DebugString(void) const {
@@ -788,8 +792,7 @@ bool ClusterResourceScheduler::AllocateTaskResourceInstances(
 }
 
 void ClusterResourceScheduler::UpdateLocalAvailableResourcesFromResourceInstances() {
-  RAY_LOG(INFO) << "dbg: UpdateLocalAvailableResourcesFromResourceInstances() local_node_id=" << local_node_id_
-                << " local_resources_=" << local_resources_.DebugString(string_to_int_map_);;
+  RAY_LOG(INFO) << "dbg: UpdateLocalAvailableResourcesFromResourceInstances() local_node_id=" << local_node_id_;
 
   auto it_local_node = nodes_.find(local_node_id_);
   RAY_CHECK(it_local_node != nodes_.end());
@@ -823,6 +826,10 @@ void ClusterResourceScheduler::UpdateLocalAvailableResourcesFromResourceInstance
     local_view->custom_resources[resource_name].available = available;
     local_view->custom_resources[resource_name].total = total;
   }
+  RAY_LOG(INFO) << "dbg: UpdateLocalAvailableResourcesFromResourceInstances() local_view="
+                << local_view->DebugString(string_to_int_map_);
+  RAY_LOG(INFO) << "dbg: UpdateLocalAvailableResourcesFromResourceInstances() local_resources_="
+                << local_resources_.DebugString(string_to_int_map_);;
 }
 
 void ClusterResourceScheduler::FreeTaskResourceInstances(

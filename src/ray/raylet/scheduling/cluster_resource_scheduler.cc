@@ -520,7 +520,8 @@ void ClusterResourceScheduler::DeleteLocalResource(const std::string &resource_n
 void ClusterResourceScheduler::DeleteResource(const std::string &node_id_string,
                                               const std::string &resource_name) {
   int64_t node_id = string_to_int_map_.Get(node_id_string);
-  RAY_LOG(INFO) << "dbg: DeleteResource() node_id=" << node_id;
+  RAY_LOG(INFO) << "dbg: DeleteResource() node_id=" << node_id << " resource_name=" << resource_name
+                << " is_local=" << (node_id == local_node_id_);
   auto it = nodes_.find(node_id);
   if (it == nodes_.end()) {
     return;
@@ -549,7 +550,6 @@ void ClusterResourceScheduler::DeleteResource(const std::string &node_id_string,
     int64_t resource_id = string_to_int_map_.Get(resource_name);
     auto itr = local_view->custom_resources.find(resource_id);
     if (itr != local_view->custom_resources.end()) {
-      string_to_int_map_.Remove(resource_id);
       local_view->custom_resources.erase(itr);
     }
 

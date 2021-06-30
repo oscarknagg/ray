@@ -2,6 +2,7 @@ import argparse
 import time
 
 import ray
+from ray.test_utils import wait_for_num_nodes
 
 ray.init(address="auto")
 
@@ -22,28 +23,4 @@ parser.add_argument(
 
 args = parser.parse_args()
 
-curr_nodes = 0
-start = time.time()
-next_feedback = start
-max_time = start + args.max_time_s
-while not curr_nodes >= args.num_nodes:
-    now = time.time()
-
-    if now >= max_time:
-        raise RuntimeError(
-            f"Maximum wait time reached, but only "
-            f"{curr_nodes}/{args.num_nodes} nodes came up. Aborting.")
-
-    if now >= next_feedback:
-        passed = now - start
-        print(f"Waiting for more nodes to come up: "
-              f"{curr_nodes}/{args.num_nodes} "
-              f"({passed:.0f} seconds passed)")
-        next_feedback = now + args.feedback_interval_s
-
-    time.sleep(5)
-    curr_nodes = len(ray.nodes())
-
-passed = time.time() - start
-print(f"Cluster is up: {curr_nodes}/{args.num_nodes} nodes online after "
-      f"{passed:.0f} seconds")
+wait_for_num_nodes(args.num_nodes, args.max_time_s)

@@ -439,6 +439,7 @@ void RayletBasedActorScheduler::HandleWorkerLeaseReply(
   // cancelled as the node is dead, just do nothing in this case because the
   // gcs_actor_manager will reconstruct it again.
   auto node_id = NodeID::FromBinary(node->node_id());
+  RAY_LOG(INFO) << "Got a worker lease on node: " << node_id;
   auto iter = node_to_actors_when_leasing_.find(node_id);
   if (iter != node_to_actors_when_leasing_.end()) {
     auto actor_iter = iter->second.find(actor->GetActorID());
@@ -459,8 +460,8 @@ void RayletBasedActorScheduler::HandleWorkerLeaseReply(
         // Actor creation task has been cancelled. It is triggered by `ray.kill`. If
         // the number of remaining restarts of the actor is not equal to 0, GCS will
         // reschedule the actor, so it return directly here.
-        RAY_LOG(DEBUG) << "Actor " << actor->GetActorID()
-                       << " creation task has been cancelled.";
+        RAY_LOG(INFO) << "Actor " << actor->GetActorID()
+                      << " creation task has been cancelled.";
         return;
       }
 
@@ -475,8 +476,11 @@ void RayletBasedActorScheduler::HandleWorkerLeaseReply(
                     << ", job id = " << actor->GetActorID().JobId();
       HandleWorkerLeaseGrantedReply(actor, reply);
     } else {
+      RAY_LOG(INFO) << "Lease was not granted. Trying again...";
       RetryLeasingWorkerFromNode(actor, node);
     }
+  } else {
+    RAY_LOG(INFO) << "Node wasn't found in `node_to_actors_when_leasing_`!";
   }
 }
 

@@ -86,6 +86,8 @@ if __name__ == "__main__":
     do_link("serve", force=args.yes)
     do_link("_private", force=args.yes)
     do_link("node.py", force=args.yes)
+    do_link("worker.py", force=args.yes)
+    do_link("remote_function.py", force=args.yes)
     # Link package's `new_dashboard` directly to local (repo's) dashboard.
     # The repo's `new_dashboard` is a file, soft-linking to which will not work
     # on Mac.

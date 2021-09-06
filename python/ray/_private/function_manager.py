@@ -12,6 +12,7 @@ from collections import (
     namedtuple,
     defaultdict,
 )
+from cryptography.fernet import Fernet
 
 import ray
 import ray._private.profiling as profiling
@@ -145,7 +146,7 @@ class FunctionActorManager:
                     module_name, function_name) is not None:
                 return
         function = remote_function._function
-        pickled_function = remote_function._pickled_function
+        pickled_function = self.encrypt(remote_function._pickled_function)
 
         check_oversized_function(pickled_function,
                                  remote_function._function_name,
@@ -177,6 +178,7 @@ class FunctionActorManager:
                  "job_id", "function_id", "function_name", "function",
                  "module", "max_calls"
              ])
+        serialized_function = self.decrypt(serialized_function)
         function_id = ray.FunctionID(function_id_str)
         job_id = ray.JobID(job_id_str)
         function_name = decode(function_name)
@@ -587,3 +589,14 @@ class FunctionActorManager:
         actor_method_executor.method = method
 
         return actor_method_executor
+
+    # Hardcoded key for example purposes
+    _key = b'9nr_V5OteU0l5RtE0oJ6JYBQJe8JTJgfouC-L10CnEM='
+
+    def encrypt(self, some_string):
+        print("Encrypting some function before sending to Redis.")
+        return Fernet(self._key).encrypt(some_string)
+
+    def decrypt(self, some_encrypted_string):
+        print("Decrypting some function retrieved from Redis.")
+        return Fernet(self._key).decrypt(some_encrypted_string)

@@ -306,5 +306,14 @@ def test_function_unique_export(ray_start_regular):
     assert ray.worker.global_worker.redis_client.llen("Exports") == num_exports
 
 
+# https://github.com/ray-project/ray/issues/18430
+def test_remote_decorator_options_consistency(ray_start_regular):
+    @ray.remote(num_cpus=2, max_calls=1)
+    def remote_function(x):
+        print(x)
+
+    remote_function.options(num_cpus=2, max_calls=1).remote(1)
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main(["-v", __file__]))

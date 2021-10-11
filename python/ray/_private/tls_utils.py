@@ -7,8 +7,6 @@ import tempfile
 import grpc
 import pytest
 
-from python.ray._private.utils import load_certs_from_env
-
 
 def generate_self_signed_tls_certs():
     """Create self-signed key/cert pair for testing.
@@ -104,3 +102,18 @@ def add_port_to_grpc_server(server, address):
         return server.add_secure_port(address, credentials)
     else:
         return server.add_insecure_port(address)
+
+
+def load_certs_from_env():
+    if os.environ.get("RAY_USE_TLS", "0") == "1":
+        with open(os.environ["RAY_TLS_SERVER_CERT"], "rb") as f:
+            server_cert_chain = f.read()
+        with open(os.environ["RAY_TLS_SERVER_KEY"], "rb") as f:
+            private_key = f.read()
+        if "RAY_TLS_CA_CERT" in os.environ:
+            with open(os.environ["RAY_TLS_CA_CERT"], "rb") as f:
+                ca_cert = f.read()
+        else:
+            ca_cert = None
+
+    return server_cert_chain, private_key, ca_cert

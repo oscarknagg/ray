@@ -31,6 +31,8 @@ import ray.ray_constants as ray_constants
 # Import psutil after ray so the packaged version is used.
 import psutil
 
+from python.ray._private.tls_utils import load_certs_from_env
+
 pwd = None
 if sys.platform != "win32":
     import pwd
@@ -1109,21 +1111,6 @@ def validate_namespace(namespace: str):
     elif namespace == "":
         raise ValueError("\"\" is not a valid namespace. "
                          "Pass None to not specify a namespace.")
-
-
-def load_certs_from_env():
-    if os.environ.get("RAY_USE_TLS", "0") == "1":
-        with open(os.environ["RAY_TLS_SERVER_CERT"], "rb") as f:
-            server_cert_chain = f.read()
-        with open(os.environ["RAY_TLS_SERVER_KEY"], "rb") as f:
-            private_key = f.read()
-        if "RAY_TLS_CA_CERT" in os.environ:
-            with open(os.environ["RAY_TLS_CA_CERT"], "rb") as f:
-                ca_cert = f.read()
-        else:
-            ca_cert = None
-
-    return server_cert_chain, private_key, ca_cert
 
 
 def init_grpc_channel(address: str,

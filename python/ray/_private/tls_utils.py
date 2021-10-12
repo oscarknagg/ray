@@ -46,10 +46,10 @@ def generate_self_signed_tls_certs():
         x509.DNSName("localhost"),
     ])
     now = datetime.datetime.utcnow()
-    cert = (x509.CertificateBuilder()
-            .subject_name(ray_interal).issuer_name(ray_interal).add_extension(
-                altnames, critical=False).public_key(key.public_key())
-            .serial_number(x509.random_serial_number()).not_valid_before(now)
+    cert = (x509.CertificateBuilder().subject_name(ray_interal).issuer_name(
+        ray_interal).add_extension(altnames, critical=False).public_key(
+            key.public_key()).serial_number(
+                x509.random_serial_number()).not_valid_before(now)
             .not_valid_after(now + datetime.timedelta(days=365)).sign(
                 key, hashes.SHA256(), default_backend()))
 

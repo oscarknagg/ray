@@ -29,13 +29,13 @@ def test_put_get_with_tls(shutdown_only, use_tls):
     ray.init(num_cpus=0)
 
     for i in range(100):
-        value_before = i * 10 ** 6
+        value_before = i * 10**6
         object_ref = ray.put(value_before)
         value_after = ray.get(object_ref)
         assert value_before == value_after
 
     for i in range(100):
-        value_before = i * 10 ** 6 * 1.0
+        value_before = i * 10**6 * 1.0
         object_ref = ray.put(value_before)
         value_after = ray.get(object_ref)
         assert value_before == value_after

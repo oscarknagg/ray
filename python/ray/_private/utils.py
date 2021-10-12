@@ -27,11 +27,10 @@ import numpy as np
 import ray
 import ray._private.gcs_utils as gcs_utils
 import ray.ray_constants as ray_constants
+from ray._private.tls_utils import load_certs_from_env
 
 # Import psutil after ray so the packaged version is used.
 import psutil
-
-from python.ray._private.tls_utils import load_certs_from_env
 
 pwd = None
 if sys.platform != "win32":

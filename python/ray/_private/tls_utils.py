@@ -1,11 +1,8 @@
 import datetime
 import os
 import socket
-import sys
-import tempfile
 
 import grpc
-import pytest
 
 
 def generate_self_signed_tls_certs():
@@ -59,37 +56,6 @@ def generate_self_signed_tls_certs():
     cert_contents = cert.public_bytes(serialization.Encoding.PEM).decode()
 
     return cert_contents, key_contents
-
-
-def setup_tls():
-    """Sets up required environment variables for tls"""
-    if sys.platform == "darwin":
-        pytest.skip("Cryptography doesn't install in Mac build pipeline")
-    cert, key = generate_self_signed_tls_certs()
-    temp_dir = tempfile.mkdtemp("ray-test-certs")
-    cert_filepath = os.path.join(temp_dir, "server.crt")
-    key_filepath = os.path.join(temp_dir, "server.key")
-    with open(cert_filepath, "w") as fh:
-        fh.write(cert)
-    with open(key_filepath, "w") as fh:
-        fh.write(key)
-
-    os.environ["RAY_USE_TLS"] = "1"
-    os.environ["RAY_TLS_SERVER_CERT"] = cert_filepath
-    os.environ["RAY_TLS_SERVER_KEY"] = key_filepath
-    os.environ["RAY_TLS_CA_CERT"] = cert_filepath
-
-    return key_filepath, cert_filepath, temp_dir
-
-
-def teardown_tls(key_filepath, cert_filepath, temp_dir):
-    os.remove(key_filepath)
-    os.remove(cert_filepath)
-    os.removedirs(temp_dir)
-    os.environ["RAY_USE_TLS"] = "0"
-    del os.environ["RAY_TLS_SERVER_CERT"]
-    del os.environ["RAY_TLS_SERVER_KEY"]
-    del os.environ["RAY_TLS_CA_CERT"]
 
 
 def add_port_to_grpc_server(server, address):
